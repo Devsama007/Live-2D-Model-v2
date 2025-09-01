@@ -1,6 +1,8 @@
+import { cleanup } from "@testing-library/react";
+
 // useLive2DMotions.jsx
 export function useLive2DMotions(model, app, motions) {
-  if (!model || !app) return;
+  if (!model || !app) return { playMotion: () => { } };
 
   function playMotion(motionKey) {
     const sequence = motions[motionKey];
@@ -61,7 +63,10 @@ export function useLive2DMotions(model, app, motions) {
 
   window.addEventListener("keydown", handleKey);
 
-  return () => {
-    window.removeEventListener("keydown", handleKey);
+  return {
+    playMotion,
+    cleanup: () => {
+      window.removeEventListener("keydown", handleKey);
+    },
   };
 }

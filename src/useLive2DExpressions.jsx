@@ -134,8 +134,13 @@ export function useLive2DExpressions(model, app, expressions) {
 
   window.addEventListener("keydown", handleKey);
 
-  return () => {
-    window.removeEventListener("keydown", handleKey);
-    if (resetTimeout) clearTimeout(resetTimeout);
+  // ✅ Return both playExpression and cleanup
+  return {
+    playExpression,
+    cleanup: () => {
+      window.removeEventListener("keydown", handleKey);
+      if (resetTimeout) clearTimeout(resetTimeout);
+    },
   };
+
 }

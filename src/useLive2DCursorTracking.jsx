@@ -1,44 +1,56 @@
+// src/useLive2DCursorTracking.js
 import { useEffect } from "react";
 
-export function useLive2DCursorTracking(model) {
+export function useLive2DCursorTracking(model, app) {
   useEffect(() => {
-    if (!model) return;
+    if (!model || !app) return;
 
-    let targetX = 0;
-    let targetY = 0;
-    let smoothX = 0;
-    let smoothY = 0;
+    let isDragging = false;
+    let target = { x: 0, y: 0 }; // where the eyes want to look
+    let lastMove = Date.now();
 
-    const handleMouseMove = (e) => {
-      targetX = (e.clientX / window.innerWidth) * 2 - 1; // range -1..1
-      targetY = (e.clientY / window.innerHeight) * 2 - 1;
-    };
+    const view = app.view;
+    view.addEventListener("mousedown", () => (isDragging = true));
+    view.addEventListener("mouseup", () => (isDragging = false));
+    view.addEventListener("mouseleave", () => (isDragging = false));
 
-    const updateTracking = () => {
-      if (!model?.internalModel?.coreModel) return;
+    app.stage.interactive = true;
+    app.stage.on("pointermove", (e) => {
+      if (isDragging) return;
+
+      const pos = e.data.global;
+      target.x = (pos.x / app.renderer.width) * 2 - 1;
+      target.y = (pos.y / app.renderer.height) * 2 - 1;
+      lastMove = Date.now();
+    });
+
+    app.ticker.add(() => {
+      if (!model) return;
       const core = model.internalModel.coreModel;
 
-      // Smooth motion (lerp toward target)
-      smoothX += (targetX - smoothX) * 0.1;
-      smoothY += (targetY - smoothY) * 0.1;
+      // after 2s idle, reset target to 0
+      if (Date.now() - lastMove > 2000 && !isDragging) {
+        target.x = 0;
+        target.y = 0;
+      }
 
-      // Head / body
-      core.setParameterValueById("ParamAngleX", smoothX * 30);
-      core.setParameterValueById("ParamAngleY", -smoothY * 30);
-      core.setParameterValueById("ParamBodyAngleX", smoothX * 10);
+      // smooth interpolation each frame
+      const currentX = core.getParameterValueById("ParamAngleX");
+      const currentY = core.getParameterValueById("ParamAngleY");
+      const currentEyeX = core.getParameterValueById("ParamEyeBallX");
+      const currentEyeY = core.getParameterValueById("ParamEyeBallY");
 
-      // Eyes
-      core.setParameterValueById("ParamEyeBallX", smoothX);
-      core.setParameterValueById("ParamEyeBallY", -smoothY);
+      const lerp = (a, b, t) => a + (b - a) * t;
 
-      requestAnimationFrame(updateTracking);
-    };
+      const newAngleX = lerp(currentX, target.x * 30, 0.1);
+      const newAngleY = lerp(currentY, -target.y * 30, 0.1);
+      const newEyeX = lerp(currentEyeX, target.x, 0.15);
+      const newEyeY = lerp(currentEyeY, -target.y, 0.15);
 
-    window.addEventListener("mousemove", handleMouseMove);
-    updateTracking();
-
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-    };
-  }, [model]);
+      core.setParameterValueById("ParamAngleX", newAngleX);
+      core.setParameterValueById("ParamAngleY", newAngleY);
+      core.setParameterValueById("ParamEyeBallX", newEyeX);
+      core.setParameterValueById("ParamEyeBallY", newEyeY);
+    });
+  }, [model, app]);
 }
