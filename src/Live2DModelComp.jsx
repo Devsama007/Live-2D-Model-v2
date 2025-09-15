@@ -1,4 +1,5 @@
 // src/Live2DModelComp.jsx
+
 import React, { useEffect, useRef, useState } from "react";
 import * as PIXI from "pixi.js";
 import { Live2DModel } from "pixi-live2d-display/cubism4";
@@ -8,15 +9,25 @@ import { motions } from "./motionsMap";
 import { useLive2DMotions } from "./useLive2DMotions";
 import FaceTracker from "./FaceTracker";
 import { useCombos } from "./useCombos";
-import { io } from "socket.io-client";
+// ✅ FIXED: Correct import
+import io from "socket.io-client";
+
+// Import components
+import AnnieStats from "./components/AnnieStats";
+import ChatInterface from "./components/ChatInterface";
 
 export default function Live2DModelComp() {
   const canvasRef = useRef();
   const [model, setModel] = useState(null);
   const [app, setApp] = useState(null);
+  const [socket, setSocket] = useState(null);
+  const [isConnected, setIsConnected] = useState(false);
   
-  // ✅ Use useRef for cursor tracking (no re-renders)
+  // Use useRef for cursor tracking (no re-renders)
   const cursorRef = useRef({ x: 0, y: 0, isEnabled: true });
+  
+  // ✅ Ref to prevent multiple socket connections
+  const socketInitialized = useRef(false);
 
   useEffect(() => {
     async function initLive2D() {
@@ -47,7 +58,6 @@ export default function Live2DModelComp() {
 
       const motionSpeed = 10;
 
-      // ✅ Single ticker - reads from ref (no React re-renders)
       pixiApp.ticker.add((delta) => {
         modelInstance.update(delta * motionSpeed);
 
@@ -55,11 +65,10 @@ export default function Live2DModelComp() {
           modelInstance.expressionManager.update(modelInstance.internalModel.coreModel, delta);
         }
 
-        // ✅ Apply cursor tracking from ref (super efficient)
-        if (cursorRef.current.isEnabled && modelInstance.internalModel) {
+        if (cursorRef.current.isEnabled && !isComboPlaying && modelInstance.internalModel) {
           const coreModel = modelInstance.internalModel.coreModel;
-          coreModel.setParameterValueById("ParamAngleX", cursorRef.current.x * 12);
-          coreModel.setParameterValueById("ParamAngleY", cursorRef.current.y * -12);
+          coreModel.setParameterValueById("ParamAngleX", cursorRef.current.x * 8);
+          coreModel.setParameterValueById("ParamAngleY", cursorRef.current.y * -8);
           coreModel.setParameterValueById("ParamEyeBallX", cursorRef.current.x);
           coreModel.setParameterValueById("ParamEyeBallY", cursorRef.current.y * -1);
         }
@@ -69,9 +78,8 @@ export default function Live2DModelComp() {
     }
 
     initLive2D().catch(console.error);
-  }, []); // ✅ No dependencies - runs only once
+  }, []);
 
-  // ✅ Separate effect for mouse controls (runs only when model/app change)
   useEffect(() => {
     if (!model || !app) return;
 
@@ -89,7 +97,7 @@ export default function Live2DModelComp() {
       isDragging = true;
       lastX = e.clientX;
       lastY = e.clientY;
-      cursorRef.current.isEnabled = false; // Disable cursor tracking while dragging
+      cursorRef.current.isEnabled = false;
     };
 
     const onMouseMove = (e) => {
@@ -101,7 +109,6 @@ export default function Live2DModelComp() {
         lastX = e.clientX;
         lastY = e.clientY;
       } else {
-        // ✅ Update ref directly (no React re-render!)
         const rect = app.view.getBoundingClientRect();
         const centerX = rect.left + rect.width / 2;
         const centerY = rect.top + rect.height / 2;
@@ -125,7 +132,6 @@ export default function Live2DModelComp() {
       cursorRef.current.isEnabled = true;
     };
 
-    // Attach listeners
     const view = app.view;
     view.addEventListener("wheel", onWheel, { passive: false });
     view.addEventListener("mousedown", onMouseDown);
@@ -142,38 +148,143 @@ export default function Live2DModelComp() {
       view.removeEventListener("mouseleave", onMouseUp);
       window.removeEventListener("dblclick", resetLook);
     };
-  }, [model, app]); // Only runs when model or app change
+  }, [model, app]);
 
   const { playExpression } = useLive2DExpressions(model, app, expressions) || {};
   const { playMotion } = useLive2DMotions(model, app, motions);
-  
-  // ✅ Pass cursorRef to useCombos so it can disable cursor tracking during combos
   const { isComboPlaying } = useCombos(model, cursorRef) || {};
 
-  // AI INTEGRATION
+  // ✅ FIXED: Initialize Socket.IO connection ONCE
   useEffect(() => {
-    if (!model) return;
-
-    const socket = io("http://localhost:5000");
-    socket.emit("chatMessage", "Hello Gemma!");
-
-    socket.on("aiReply", (msg) => {
-      console.log("AI JSON:", msg);
-      const replyText = msg.reply || "...";
-      const expKey = msg.expression || "neutral";
-      const motionKey = msg.motion || "mouthOpenY";
-
-      playExpression(expressions[expKey], expKey);
-      playMotion(motionKey);
+    // Prevent multiple socket connections
+    if (socketInitialized.current) return;
+    socketInitialized.current = true;
+    
+    console.log('🔌 Initializing Socket.IO connection...');
+    
+    const newSocket = io("http://localhost:5000", {
+      // Force polling first (most stable)
+      transports: ['polling', 'websocket'],
+      timeout: 20000,
+      reconnection: true,
+      reconnectionDelay: 2000,
+      reconnectionAttempts: 3,
+      forceNew: true,
+      upgrade: true
     });
 
-    return () => socket.disconnect();
-  }, [model]);
+    // Connection events
+    newSocket.on("connect", () => {
+      console.log("✅ Connected to Annie:", newSocket.id);
+      setIsConnected(true);
+    });
+
+    newSocket.on("disconnect", (reason) => {
+      console.log("❌ Disconnected:", reason);
+      setIsConnected(false);
+    });
+
+    newSocket.on("connect_error", (error) => {
+      console.error("🔴 Connection error:", error);
+      setIsConnected(false);
+    });
+
+    newSocket.on("reconnect", (attemptNumber) => {
+      console.log("🔄 Reconnected after", attemptNumber, "attempts");
+      setIsConnected(true);
+    });
+
+    setSocket(newSocket);
+
+    // ✅ Cleanup on unmount
+    return () => {
+      console.log('🧹 Cleaning up socket');
+      socketInitialized.current = false;
+      newSocket.removeAllListeners();
+      newSocket.disconnect();
+    };
+  }, []); // ✅ Empty dependencies - run only once
+
+  // ✅ Handle AI events separately (only when socket exists)
+  useEffect(() => {
+    if (!socket || !playExpression || !playMotion) return;
+
+    const handleAiReply = (msg) => {
+      console.log("💬 Annie replied:", msg);
+
+      const expKey = msg.expression || "neutral";
+      const motionKey = msg.motion || "idle";
+
+      if (expressions[expKey]) {
+        playExpression(expressions[expKey], expKey);
+      }
+      
+      playMotion(motionKey);
+    };
+
+    const handleProactiveMessage = (msg) => {
+      console.log("🤖 Annie initiated:", msg);
+      
+      if (expressions[msg.expression]) {
+        playExpression(expressions[msg.expression], msg.expression);
+      }
+      
+      playMotion(msg.motion);
+    };
+
+    // Add event listeners
+    socket.on("aiReply", handleAiReply);
+    socket.on("proactiveMessage", handleProactiveMessage);
+
+    // Cleanup listeners
+    return () => {
+      socket.off("aiReply", handleAiReply);
+      socket.off("proactiveMessage", handleProactiveMessage);
+    };
+  }, [socket, playExpression, playMotion]); // Dependencies for AI events only
 
   return (
     <>
       <canvas ref={canvasRef} style={{ width: "100%", height: "100%" }} />
-      {/* <FaceTracker onFaceData={setFaceData} debug={true} /> */}
+      
+      {/* Simple connection indicator */}
+      <div style={{
+        position: 'fixed',
+        top: '10px',
+        right: '10px',
+        padding: '8px 16px',
+        borderRadius: '20px',
+        fontSize: '14px',
+        fontWeight: 'bold',
+        zIndex: 1000,
+        background: isConnected ? '#4CAF50' : '#F44336',
+        color: 'white',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+      }}>
+        {isConnected ? '✅ Annie Online' : '❌ Connecting...'}
+      </div>
+      
+      {/* Pass socket to components */}
+      <AnnieStats socket={socket} />
+      <ChatInterface socket={socket} />
+      
+      {/* Debug info */}
+      {process.env.NODE_ENV === 'development' && (
+        <div style={{
+          position: 'fixed',
+          bottom: '10px',
+          left: '10px',
+          background: 'rgba(0,0,0,0.8)',
+          color: 'white',
+          padding: '8px',
+          borderRadius: '4px',
+          fontSize: '12px',
+          fontFamily: 'monospace'
+        }}>
+          <div>Socket: {socket ? (isConnected ? 'Connected' : 'Disconnected') : 'Not initialized'}</div>
+          <div>Model: {model ? 'Loaded' : 'Loading...'}</div>
+        </div>
+      )}
     </>
   );
 }

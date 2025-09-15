@@ -1,0 +1,140 @@
+{
+  "history": [
+    {
+      "sender": "User",
+      "message": "Hi Ai chan",
+      "timestamp": 1757193800210,
+      "mood": "neutral",
+      "sentiment": 0,
+      "dominantEmotion": "neutral",
+      "emotions": {
+        "affection": false,
+        "playfulness": false,
+        "concern": false,
+        "criticism": false,
+        "appreciation": false
+      },
+      "intensity": 0
+    },
+    {
+      "sender": "Annie",
+      "message": "Hey there! It's lovely to hear from you again. I hope you're having a nice day so far! 😊...",
+      "timestamp": 1757193800210,
+      "mood": "neutral",
+      "expression": "neutral",
+      "motion": "idle"
+    },
+    {
+      "sender": "User",
+      "message": "Hey ai chan",
+      "timestamp": 1757194112763,
+      "mood": "neutral",
+      "sentiment": 0,
+      "dominantEmotion": "neutral",
+      "emotions": {
+        "affection": false,
+        "playfulness": false,
+        "concern": false,
+        "criticism": false,
+        "appreciation": false
+      },
+      "intensity": 0
+    },
+    {
+      "sender": "Annie",
+      "message": "Hey there! It's lovely to hear from you again. I hope you're having a nice day so far!",
+      "timestamp": 1757194112764,
+      "mood": "neutral",
+      "expression": "happy",
+      "motion": "smile"
+    },
+    {
+      "sender": "User",
+      "message": "Ai chan",
+      "timestamp": 1757790235780,
+      "mood": "neutral",
+      "sentiment": 0,
+      "dominantEmotion": "neutral",
+      "emotions": {
+        "affection": false,
+        "playfulness": false,
+        "concern": false,
+        "criticism": false,
+        "appreciation": false
+      },
+      "intensity": 0
+    },
+    {
+      "sender": "Annie",
+      "message": "Hey there! It's lovely to hear from you again. I hope you're having a nice day so far! 😊",
+      "timestamp": 1757790235780,
+      "mood": "neutral",
+      "expression": "happy",
+      "motion": "smile"
+    },
+    {
+      "sender": "User",
+      "message": "Ai chan",
+      "timestamp": 1757791046577,
+      "mood": "neutral",
+      "sentiment": 0,
+      "dominantEmotion": "neutral",
+      "emotions": {
+        "affection": false,
+        "playfulness": false,
+        "concern": false,
+        "criticism": false,
+        "appreciation": false
+      },
+      "intensity": 0
+    },
+    {
+      "sender": "Annie",
+      "message": "Hey there! It's lovely to hear from you again. I hope you're having a nice day so far!",
+      "timestamp": 1757791046577,
+      "mood": "neutral",
+      "expression": "happy",
+      "motion": "lookAway"
+    },
+    {
+      "sender": "User",
+      "message": "Hello Annie, this is a test message!",
+      "timestamp": 1757791458492,
+      "mood": "neutral",
+      "sentiment": 0,
+      "dominantEmotion": "neutral",
+      "emotions": {
+        "affection": false,
+        "playfulness": false,
+        "concern": false,
+        "criticism": false,
+        "appreciation": false
+      },
+      "intensity": 0
+    },
+    {
+      "sender": "Annie",
+      "message": "Hello to you too! I'm happy to hear that you're testing my responses.",
+      "timestamp": 1757791458492,
+      "mood": "neutral",
+      "expression": "happy",
+      "motion": "smile"
+    }
+  ],
+  "profile": {
+    "name": null,
+    "interests": [],
+    "personality": "unknown",
+    "relationship_stage": "stranger",
+    "preferred_topics": [],
+    "dislikes": []
+  },
+  "mood": "neutral",
+  "relationships": {
+    "affection": 0,
+    "trust": 0,
+    "familiarity": 2.5
+  },
+  "autonomousThoughts": [],
+  "lastUpdated": 1757791458597
+}
