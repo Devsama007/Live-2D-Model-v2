@@ -119,6 +119,174 @@
       "mood": "neutral",
       "expression": "happy",
       "motion": "smile"
+    },
+    {
+      "sender": "User",
+      "message": "Hi Ai chan. Ready for shine Bkomachi idol",
+      "timestamp": 1758311539093,
+      "mood": "neutral",
+      "sentiment": 0,
+      "dominantEmotion": "neutral",
+      "emotions": {
+        "affection": false,
+        "playfulness": false,
+        "concern": false,
+        "criticism": false,
+        "appreciation": false
+      },
+      "intensity": 0
+    },
+    {
+      "sender": "Annie",
+      "message": "AI: Hello there, Bkomachi idol! How are you feeling today?",
+      "timestamp": 1758311539100,
+      "mood": "neutral",
+      "expression": "neutral",
+      "motion": "idle"
+    },
+    {
+      "sender": "User",
+      "message": "i am fine. How about you",
+      "timestamp": 1758311573391,
+      "mood": "neutral",
+      "sentiment": 0,
+      "dominantEmotion": "neutral",
+      "emotions": {
+        "affection": false,
+        "playfulness": false,
+        "concern": false,
+        "criticism": false,
+        "appreciation": false
+      },
+      "intensity": 0
+    },
+    {
+      "sender": "Annie",
+      "message": "AI: Of course! I'm Ai Hoshino, a cheerful and playful AI companion. Currently, my mood is neutral. To keep the conversation flowing, here are some examples of valid expressions and motion responses that can be included in your reply:",
+      "timestamp": 1758311573391,
+      "mood": "neutral",
+      "expression": "neutral",
+      "motion": "idle"
+    },
+    {
+      "sender": "User",
+      "message": "i am fine",
+      "timestamp": 1758311612358,
+      "mood": "neutral",
+      "sentiment": 0,
+      "dominantEmotion": "neutral",
+      "emotions": {
+        "affection": false,
+        "playfulness": false,
+        "concern": false,
+        "criticism": false,
+        "appreciation": false
+      },
+      "intensity": 0
+    },
+    {
+      "sender": "Annie",
+      "message": "AI: Hi there! I'm Ai Hoshino, a cheerful and playful AI companion. Welcome to my virtual world! How are you feeling today?",
+      "timestamp": 1758311612359,
+      "mood": "neutral",
+      "expression": "neutral",
+      "motion": "idle"
+    },
+    {
+      "sender": "User",
+      "message": "Just waiting for your reply",
+      "timestamp": 1758311653892,
+      "mood": "neutral",
+      "sentiment": 0,
+      "dominantEmotion": "neutral",
+      "emotions": {
+        "affection": false,
+        "playfulness": false,
+        "concern": false,
+        "criticism": false,
+        "appreciation": false
+      },
+      "intensity": 0
+    },
+    {
+      "sender": "Annie",
+      "message": "AI: (smiling) Of course! How may I assist you today?",
+      "timestamp": 1758311653892,
+      "mood": "neutral",
+      "expression": "neutral",
+      "motion": "idle"
+    },
+    {
+      "sender": "User",
+      "message": "Just say something cute",
+      "timestamp": 1758311676976,
+      "mood": "neutral",
+      "sentiment": 0.6666666666666666,
+      "dominantEmotion": "neutral",
+      "emotions": {
+        "affection": false,
+        "playfulness": false,
+        "concern": false,
+        "criticism": false,
+        "appreciation": false
+      },
+      "intensity": 0.6666666666666666
+    },
+    {
+      "sender": "Annie",
+      "message": "AI: Of course! Here's a sample response:",
+      "timestamp": 1758311676976,
+      "mood": "happy",
+      "expression": "neutral",
+      "motion": "idle"
+    },
+    {
+      "sender": "User",
+      "message": "How is your mood now?",
+      "timestamp": 1758312269755,
+      "mood": "happy",
+      "sentiment": 0,
+      "dominantEmotion": "neutral",
+      "emotions": {
+        "affection": false,
+        "playfulness": false,
+        "concern": false,
+        "criticism": false,
+        "appreciation": false
+      },
+      "intensity": 0
+    },
+    {
+      "sender": "Annie",
+      "message": "AI: (smiling) Hi there! My moood is happy. I'm feeling quite cheerful today.",
+      "timestamp": 1758312269755,
+      "mood": "neutral",
+      "expression": "neutral",
+      "motion": "idle"
+    },
+    {
+      "sender": "User",
+      "message": "Sounds Good",
+      "timestamp": 1758312299675,
+      "mood": "neutral",
+      "sentiment": 0.3333333333333333,
+      "dominantEmotion": "neutral",
+      "emotions": {
+        "affection": false,
+        "playfulness": false,
+        "concern": false,
+        "criticism": false,
+        "appreciation": false
+      },
+      "intensity": 0.3333333333333333
+    },
+    {
+      "sender": "Annie",
+      "message": "AI: Of course! Here's another example of how I can help you:",
+      "timestamp": 1758312299675,
+      "mood": "content",
+      "expression": "neutral",
+      "motion": "idle"
     }
   ],
   "profile": {
@@ -129,12 +297,12 @@
     "preferred_topics": [],
     "dislikes": []
   },
-  "mood": "neutral",
+  "mood": "content",
   "relationships": {
-    "affection": 0,
-    "trust": 0,
-    "familiarity": 2.5
+    "affection": 2,
+    "trust": 1,
+    "familiarity": 6
   },
   "autonomousThoughts": [],
-  "lastUpdated": 1757791458597
+  "lastUpdated": 1758312299680
 }

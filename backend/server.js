@@ -1,4 +1,5 @@
 // Fixed server.js with better Ollama handling and debugging
+// Complete Fixed server.js with optimized Ollama handling
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
@@ -16,7 +17,7 @@ const app = express();
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: { 
+  cors: {
     origin: "*",
     methods: ["GET", "POST"]
   },
@@ -41,108 +42,99 @@ let proactiveBehavior;
 await annieMemory.loadMemory();
 proactiveBehavior = new ProactiveBehavior(annieMemory);
 
-// ✅ FIXED: Better Ollama connection with proper stream handling
-// Replace your queryAnnieWithMemory function with this fixed version
-
+// ✅ OPTIMIZED OLLAMA QUERY FUNCTION
 async function queryAnnieWithMemory(userPrompt, isProactive = false) {
   console.log("🔹 Starting query to Ollama...");
-  
+
   const sentiment = sentimentAnalyzer.analyzeSentiment(userPrompt);
   const emotionalContext = sentimentAnalyzer.getEmotionalContext(userPrompt, sentiment);
   const insights = annieMemory.getPersonalityInsights();
-  const recentContext = annieMemory.getRecentContext(8);
+  const recentContext = annieMemory.getRecentContext(3); // Reduced from 8
   const memoryRef = annieMemory.shouldShowMemoryReference() ? annieMemory.getMemoryReference() : null;
 
-  // ✅ MUCH SHORTER PROMPT to avoid timeout
-  let systemPrompt = `You are Annie (Ai Hoshino). Respond as a cheerful anime girl.
+  // ✅ MUCH SIMPLER PROMPT - The key fix!
+  let systemPrompt = `You are Ai Hoshino, a cheerful, playful AI companion. 
+Current mood: ${annieMemory.mood}. 
+Talk to the user in a warm, natural, and realistic way — like a friend. 
+Keep responses short and conversational.
 
-Current mood: ${annieMemory.mood}
-Relationship: ${annieMemory.userProfile.relationship_stage}
+At the END of your reply, also include a single JSON object on a new line with this exact format:
+{"expression": "happy", "motion": "smile"}
 
-Respond in JSON format:
-{
-  "reply": "your response here",
-  "expression": "happy|sad|neutral|excited|thinking",
-  "motion": "smile|nod|tilt|blink"
-}`;
+Valid expressions: happy, sad, neutral, excited, thinking, surprised
+Valid motions: smile, nod, tiltHead, blink, wave, idle
 
-  const prompt = isProactive ? 
-    `${systemPrompt}\n\nContext: ${userPrompt}\nAnnie:` :
-    `${systemPrompt}\n\nUser: ${userPrompt}\nAnnie:`;
+User: ${userPrompt}
+`;
 
   try {
     console.log("🔹 Sending request to Ollama...");
-    console.log("🔹 Prompt length:", prompt.length);
-    
-    // ✅ FIXED: Add proper timeout and simplified request
+    console.log("🔹 Prompt length:", systemPrompt.length);
+
+    // ✅ CRITICAL FIXES:
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       console.log("⏰ Request timeout - aborting");
       controller.abort();
-    }, 15000); // 15 second timeout
+    }, 120000); // Increased to 25 seconds
 
     const res = await fetch("http://127.0.0.1:11434/api/generate", {
       method: "POST",
-      headers: { 
+      headers: {
         "Content-Type": "application/json",
         "Accept": "application/json"
       },
       body: JSON.stringify({
-        model: "gemma:2b",
-        prompt: prompt,
-        stream: false, // ✅ Critical: NO streaming
+        model: "tinyllama",
+        prompt: systemPrompt,
+        stream: false, // ✅ NO streaming
         options: {
-          temperature: 0.7,
-          num_predict: 150, // ✅ Limit response length
-          top_k: 10,
-          top_p: 0.9,
-          stop: ["\n\nUser:", "Human:", "\n\n"] // ✅ Stop sequences
+          temperature: 0.3, // ✅ Lower temperature for more consistent JSON
+          num_predict: 100, // ✅ Shorter responses
+          top_k: 5, // ✅ More focused responses
+          top_p: 0.8,
+          repeat_penalty: 1.1,
+          stop: ["\n\nUser:", "Human:", "\n\n", "```"] // ✅ Better stop sequences
         }
       }),
-      signal: controller.signal // ✅ Add abort signal
+      signal: controller.signal
     });
 
-    clearTimeout(timeoutId); // Clear timeout if request completes
+    clearTimeout(timeoutId);
 
     console.log("🔹 Response status:", res.status);
-    console.log("🔹 Response headers:", Object.fromEntries(res.headers.entries()));
 
     if (!res.ok) {
-      throw new Error(`Ollama request failed: ${res.status} ${res.statusText}`);
+      throw new Error(`Ollama HTTP ${res.status}: ${res.statusText}`);
     }
 
     const data = await res.json();
     console.log("🔹 Raw Ollama response:", JSON.stringify(data, null, 2));
 
-    // ✅ Better response validation
     if (!data.response || typeof data.response !== "string") {
-      throw new Error("Invalid or empty response from Ollama");
+      throw new Error("Invalid response format from Ollama");
     }
 
     console.log("🔹 Response content:", data.response);
 
     let annieResponse = parseAnnieResponse(data.response);
-    
-    // ✅ Validate parsed response
-    if (!annieResponse.reply || annieResponse.reply === "...") {
-      console.warn("⚠️ Parsed response was empty, using fallback");
-      annieResponse = {
-        reply: "Hi there! How can I help you? 😊",
-        expression: "happy",
-        motion: "smile"
-      };
+
+    // ✅ Final validation with better fallback
+    if (!annieResponse.reply || annieResponse.reply.length < 3) {
+      console.warn("⚠️ Response too short, using contextual fallback");
+      annieResponse = getContextualFallback(userPrompt, sentiment);
     }
 
     console.log("✅ Final Annie response:", annieResponse);
-    
+
     // Save to memory (existing code)
     if (!isProactive) {
       annieMemory.addConversation('User', userPrompt, { sentiment, ...emotionalContext });
       annieMemory.updateMood(sentiment);
       annieMemory.updateRelationships(sentiment);
     }
-    
-    annieMemory.addConversation('Annie', annieResponse.reply, { 
+
+    annieMemory.addConversation('Annie', annieResponse.reply, {
       expression: annieResponse.expression,
       motion: annieResponse.motion,
       mood: annieMemory.mood
@@ -155,7 +147,8 @@ Respond in JSON format:
       recentHistory: recentContext
     });
 
-    if (Math.random() < 0.3) {
+    // ✅ Save less frequently to reduce I/O
+    if (Math.random() < 0.2) { // Reduced from 0.3
       await annieMemory.saveMemory();
     }
 
@@ -163,46 +156,203 @@ Respond in JSON format:
 
   } catch (error) {
     console.error("❌ Error querying Ollama:", error.name, error.message);
-    
-    // ✅ Different fallback based on error type
+
+    // ✅ Better error handling with contextual fallbacks
     if (error.name === 'AbortError') {
-      return {
-        reply: "Sorry, I'm taking too long to think... let me try again! 🤔",
-        expression: "thinking",
-        motion: "tiltHead"
-      };
+      return getTimeoutFallback(userPrompt);
     }
-    
-    if (error.message.includes('fetch')) {
-      return {
-        reply: "I can't connect to my brain right now... is Ollama running? 😅",
-        expression: "sad",
-        motion: "lookAway"
-      };
+
+    if (error.message.includes('fetch') || error.message.includes('ECONNREFUSED')) {
+      return getConnectionFallback();
     }
-    
+
+    return getGenericFallback(userPrompt);
+  }
+}
+
+// ✅ MUCH IMPROVED JSON PARSING
+function parseAnnieResponse(rawResponse) {
+  if (!rawResponse || typeof rawResponse !== "string") return null;
+
+  console.log("🔍 Parsing response:", rawResponse.substring(0, 200) + "...");
+
+  // Extract JSON metadata at the end
+  const jsonMatch = rawResponse.match(/\{[^}]*\}/);
+  let expression = "neutral";
+  let motion = "idle";
+
+  if (jsonMatch) {
+    try {
+      const meta = JSON.parse(jsonMatch[0]);
+      expression = validateExpression(meta.expression);
+      motion = validateMotion(meta.motion);
+    } catch (e) {
+      console.warn("⚠️ Metadata parse failed:", e.message);
+    }
+  }
+
+  // Take everything BEFORE the JSON as the actual reply
+  const replyText = rawResponse.replace(/\{[^}]*\}/, "").trim();
+
+  return {
+    reply: replyText,
+    expression,
+    motion
+  };
+}
+
+
+// ✅ Helper functions for validation and fallbacks
+function validateExpression(exp) {
+  const valid = ["happy", "sad", "neutral", "excited", "thinking", "surprised"];
+  return valid.includes(exp) ? exp : "neutral";
+}
+
+function validateMotion(motion) {
+  const valid = ["smile", "nod", "tiltHead", "blink", "wave", "idle"];
+  return valid.includes(motion) ? motion : "idle";
+}
+
+function getContextualFallback(userPrompt, sentiment) {
+  const responses = {
+    positive: [
+      "That sounds great! Tell me more! 😊",
+      "I'm so happy to hear that! 💕",
+      "That's wonderful! How exciting! ✨"
+    ],
+    negative: [
+      "I'm sorry to hear that... How can I help? 💙",
+      "That sounds tough. I'm here for you! 🤗",
+      "Oh no... Want to talk about it? 😔"
+    ],
+    neutral: [
+      "That's interesting! What do you think about it? 🤔",
+      "I see! Can you tell me more? 😌",
+      "Hmm, that's something to think about! 💭"
+    ]
+  };
+
+  const category = sentiment > 0 ? 'positive' : sentiment < 0 ? 'negative' : 'neutral';
+  const msgs = responses[category];
+  const reply = msgs[Math.floor(Math.random() * msgs.length)];
+
+  return {
+    reply,
+    expression: category === 'positive' ? 'happy' : category === 'negative' ? 'sad' : 'thinking',
+    motion: category === 'positive' ? 'smile' : category === 'negative' ? 'nod' : 'tiltHead'
+  };
+}
+
+function getTimeoutFallback(userPrompt) {
+  const responses = [
+    "Sorry, I need a moment to think... Can you ask me again? 🤔",
+    "My thoughts are running slow right now... Try once more? 💭",
+    "Hmm, I'm taking too long to respond! Let me try again! ⏰"
+  ];
+
+  return {
+    reply: responses[Math.floor(Math.random() * responses.length)],
+    expression: "thinking",
+    motion: "tiltHead"
+  };
+}
+
+function getConnectionFallback() {
+  return {
+    reply: "I'm having trouble connecting to my brain... Is Ollama running? 🤖",
+    expression: "sad",
+    motion: "lookAway"
+  };
+}
+
+function getGenericFallback(userPrompt) {
+  return {
+    reply: "Something went wrong with my thoughts... What were we talking about? 😅",
+    expression: "neutral",
+    motion: "idle"
+  };
+}
+
+// ✅ Enhanced Ollama health check
+async function checkOllamaHealthDetailed() {
+  try {
+    console.log("🔍 Checking Ollama health...");
+
+    // Check if Ollama is running
+    const tagsRes = await fetch("http://127.0.0.1:11434/api/tags", {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(5000)
+    });
+
+    if (!tagsRes.ok) {
+      throw new Error(`Ollama server error: ${tagsRes.status}`);
+    }
+
+    const tagsData = await tagsRes.json();
+    console.log("📋 Available models:", tagsData.models?.map(m => m.name) || []);
+
+    // Check if tinyllama is available
+    const hasTinyLlama = tagsData.models?.some(m => m.name.includes('tinyllama'));
+
+    if (!hasTinyLlama) {
+      console.warn("⚠️ tinyllama model not found! Available models:", tagsData.models?.map(m => m.name));
+      return { available: true, modelReady: false, models: tagsData.models };
+    }
+
+    // Test a simple generation
+    const testRes = await fetch("http://127.0.0.1:11434/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "tinyllama",
+        prompt: 'Say "OK" in JSON: {"reply": "OK"}',
+        stream: false,
+        options: { num_predict: 20 }
+      }),
+      signal: AbortSignal.timeout(120000)
+    });
+
+    if (!testRes.ok) {
+      throw new Error(`Test generation failed: ${testRes.status}`);
+    }
+
+    const testData = await testRes.json();
+    const isWorking = testData.response && testData.response.includes('OK');
+
+    console.log(isWorking ? "✅ Ollama test successful" : "⚠️ Ollama test failed");
+
     return {
-      reply: "Hmm, something went wrong with my thoughts... 💭",
-      expression: "thinking",
-      motion: "tiltHead"
+      available: true,
+      modelReady: isWorking,
+      models: tagsData.models,
+      testResponse: testData.response
+    };
+
+  } catch (error) {
+    console.error("❌ Ollama health check failed:", error.message);
+    return {
+      available: false,
+      modelReady: false,
+      error: error.message
     };
   }
 }
 
-// ✅ Also add this simple test endpoint
+// ✅ Simple test endpoint for direct Ollama testing
 app.post("/ollama-direct-test", async (req, res) => {
   console.log("🧪 Testing direct Ollama connection...");
-  
+
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 120000);  //120 sec
 
     const response = await fetch("http://127.0.0.1:11434/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "gemma:2b",
-        prompt: "Say 'Hello World' in JSON format: {\"message\": \"Hello World\"}",
+        model: "tinyllama",
+        prompt: 'Say "Hello World" in JSON format: {"message": "Hello World"}',
         stream: false,
         options: {
           num_predict: 50
@@ -219,7 +369,7 @@ app.post("/ollama-direct-test", async (req, res) => {
 
     const data = await response.json();
     console.log("✅ Direct Ollama test successful:", data);
-    
+
     res.json({
       success: true,
       ollamaResponse: data
@@ -230,112 +380,28 @@ app.post("/ollama-direct-test", async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message,
-      suggestion: error.name === 'AbortError' ? 
-        'Ollama is too slow - check system resources' : 
+      suggestion: error.name === 'AbortError' ?
+        'Ollama is too slow - check system resources' :
         'Check if Ollama is running: ollama serve'
     });
   }
 });
-
-
-
-// ✅ FIXED: Much better JSON parsing with multiple fallback strategies
-function parseAnnieResponse(rawResponse) {
-  if (!rawResponse || typeof rawResponse !== "string") {
-    console.warn("⚠️ Empty or invalid raw response");
-    return { 
-      reply: "I'm having trouble right now... 😅", 
-      expression: "neutral", 
-      motion: "idle" 
-    };
-  }
-
-  console.log("🔍 Parsing response:", rawResponse.substring(0, 200) + "...");
-
-  // Strategy 1: Try to find and parse complete JSON block
-  try {
-    const jsonMatch = rawResponse.match(/\{[\s\S]*?\}/);
-    if (jsonMatch) {
-      console.log("🔍 Found JSON match:", jsonMatch[0]);
-      const parsed = json5parse(jsonMatch[0]);
-      
-      if (parsed.reply && typeof parsed.reply === "string") {
-        console.log("✅ Successfully parsed JSON");
-        return {
-          reply: parsed.reply.trim(),
-          expression: parsed.expression || "neutral",
-          motion: parsed.motion || "idle"
-        };
-      }
-    }
-  } catch (e) {
-    console.warn("⚠️ JSON5 parse failed:", e.message);
-  }
-
-  // Strategy 2: Extract fields using regex
-  try {
-    const replyMatch = rawResponse.match(/"reply"\s*:\s*"([^"]+)"/);
-    const expMatch = rawResponse.match(/"expression"\s*:\s*"([^"]+)"/);
-    const motionMatch = rawResponse.match(/"motion"\s*:\s*"([^"]+)"/);
-
-    if (replyMatch && replyMatch[1]) {
-      console.log("✅ Extracted reply via regex");
-      return {
-        reply: replyMatch[1].trim(),
-        expression: expMatch ? expMatch[1] : "neutral",
-        motion: motionMatch ? motionMatch[1] : "idle"
-      };
-    }
-  } catch (e) {
-    console.warn("⚠️ Regex extraction failed:", e.message);
-  }
-
-  // Strategy 3: Look for dialogue without JSON
-  const dialogueMatch = rawResponse.match(/(?:Annie|Ai):\s*(.+)/i);
-  if (dialogueMatch && dialogueMatch[1]) {
-    console.log("✅ Found dialogue format");
-    return {
-      reply: dialogueMatch[1].trim(),
-      expression: "neutral",
-      motion: "idle"
-    };
-  }
-
-  // Strategy 4: Use first reasonable sentence
-  const sentences = rawResponse.split(/[.!?]+/).filter(s => s.trim().length > 10);
-  if (sentences.length > 0) {
-    console.log("✅ Using first sentence");
-    return {
-      reply: sentences[0].trim() + (sentences[0].match(/[.!?]$/) ? "" : "."),
-      expression: "neutral",
-      motion: "idle"
-    };
-  }
-
-  // Final fallback
-  console.warn("⚠️ All parsing strategies failed, using fallback");
-  return {
-    reply: "I'm having some trouble with my thoughts right now... 😅",
-    expression: "thinking",
-    motion: "tiltHead"
-  };
-}
 
 // Enhanced Socket.IO handling with better error handling
 io.on("connection", (socket) => {
   connectionCounter++;
   const connectionId = connectionCounter;
   const connectionTime = Date.now();
-  
+
   activeConnections.set(socket.id, {
     id: connectionId,
     connectedAt: connectionTime,
     lastActivity: connectionTime
   });
-  
+
   console.log(`✅ User connected: ${socket.id} (Connection #${connectionId})`);
   console.log(`📊 Active connections: ${activeConnections.size}`);
-  
+
   proactiveBehavior.updateLastInteraction();
 
   socket.on('error', (error) => {
@@ -345,12 +411,12 @@ io.on("connection", (socket) => {
   socket.on('disconnect', (reason) => {
     const connection = activeConnections.get(socket.id);
     const duration = connection ? Date.now() - connection.connectedAt : 0;
-    
+
     console.log(`❌ User disconnected: ${socket.id} (Connection #${connection?.id || 'unknown'})`);
     console.log(`   Reason: ${reason}`);
     console.log(`   Duration: ${Math.round(duration / 1000)}s`);
     console.log(`📊 Remaining connections: ${activeConnections.size - 1}`);
-    
+
     activeConnections.delete(socket.id);
   });
 
@@ -361,30 +427,30 @@ io.on("connection", (socket) => {
       relationship: annieMemory.userProfile.relationship_stage,
       affection: annieMemory.relationships.affection,
       conversations: annieMemory.conversationHistory.length,
-      lastSeen: annieMemory.conversationHistory.length > 0 ? 
+      lastSeen: annieMemory.conversationHistory.length > 0 ?
         annieMemory.conversationHistory[annieMemory.conversationHistory.length - 1].timestamp : null,
       connectionId: connectionId
     });
-    
+
     // ✅ Send connection confirmation
     socket.emit("connectionConfirmed", {
       connectionId,
       serverTime: Date.now(),
       ollamaStatus: "checking..."
     });
-    
+
   } catch (error) {
     console.error(`Failed to send initial data to ${socket.id}:`, error);
   }
 
-  // ✅ FIXED: Better message handling with timeout protection
+  // ✅ IMPROVED: Better message handling with timeout protection
   socket.on("chatMessage", async (msg) => {
     console.log(`💬 Message from ${socket.id}:`, msg);
-    
+
     if (activeConnections.has(socket.id)) {
       activeConnections.get(socket.id).lastActivity = Date.now();
     }
-    
+
     proactiveBehavior.updateLastInteraction();
 
     // ✅ Add processing indicator
@@ -402,7 +468,7 @@ io.on("connection", (socket) => {
       ]);
 
       console.log(`✅ Sending reply to ${socket.id}:`, reply);
-      
+
       socket.emit("aiReply", reply);
       socket.emit("annieStats", {
         mood: annieMemory.mood,
@@ -413,13 +479,13 @@ io.on("connection", (socket) => {
 
     } catch (error) {
       console.error(`❌ Error processing message from ${socket.id}:`, error.message);
-      
+
       socket.emit("aiReply", {
         reply: "Sorry, I'm having some connection issues... Can you try again in a moment? 😔",
         expression: "sad",
         motion: "lookAway"
       });
-      
+
       // ✅ Send error details in development
       if (process.env.NODE_ENV === 'development') {
         socket.emit("debugError", {
@@ -446,14 +512,9 @@ io.on("connection", (socket) => {
   // ✅ Add Ollama health check endpoint for client
   socket.on("checkOllamaStatus", async () => {
     try {
-      const res = await fetch("http://127.0.0.1:11434/api/tags", {
-        method: "GET",
-        headers: { "Content-Type": "application/json" }
-      });
-      
+      const health = await checkOllamaHealthDetailed();
       socket.emit("ollamaStatus", {
-        available: res.ok,
-        models: res.ok ? await res.json() : null,
+        ...health,
         timestamp: Date.now()
       });
     } catch (error) {
@@ -479,23 +540,14 @@ io.on("connection", (socket) => {
       activeConnections.get(socket.id).lastActivity = Date.now();
     }
   });
+
+  // Clear heartbeat on disconnect
+  socket.on('disconnect', () => {
+    clearInterval(heartbeatInterval);
+  });
 });
 
-// ✅ Add Ollama health monitoring
-async function checkOllamaHealth() {
-  try {
-    const res = await fetch("http://127.0.0.1:11434/api/tags");
-    if (res.ok) {
-      console.log("✅ Ollama is running");
-      return true;
-    }
-  } catch (error) {
-    console.log("❌ Ollama is not available:", error.message);
-  }
-  return false;
-}
-
-// Your existing REST API endpoints (unchanged)
+// Your existing REST API endpoints
 app.post("/test", async (req, res) => {
   const { prompt } = req.body;
   try {
@@ -519,11 +571,11 @@ app.get("/annie/stats", (req, res) => {
   });
 });
 
-// ✅ Add Ollama status endpoint
+// ✅ Enhanced Ollama status endpoint
 app.get("/ollama/status", async (req, res) => {
-  const isHealthy = await checkOllamaHealth();
+  const health = await checkOllamaHealthDetailed();
   res.json({
-    available: isHealthy,
+    ...health,
     endpoint: "http://127.0.0.1:11434",
     timestamp: Date.now()
   });
@@ -542,24 +594,47 @@ app.post("/annie/reset", async (req, res) => {
   annieMemory.mood = 'neutral';
   annieMemory.relationships = { affection: 0, trust: 0, familiarity: 0 };
   annieMemory.autonomousThoughts = [];
-  
+
   await annieMemory.saveMemory();
   res.json({ message: "Annie's memory has been reset" });
 });
 
+// ✅ Add a simple health endpoint
+app.get("/health", (req, res) => {
+  res.json({
+    server: "running",
+    connections: activeConnections.size,
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    timestamp: Date.now()
+  });
+});
+
+// Start server with enhanced health checking
 const PORT = 5000;
 server.listen(PORT, async () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
   console.log(`🧠 Annie's memory loaded - ${annieMemory.conversationHistory.length} conversations`);
   console.log(`💕 Current relationship: ${annieMemory.userProfile.relationship_stage} (${annieMemory.relationships.affection}/100 affection)`);
-  
-  // ✅ Check Ollama on startup
-  const ollamaHealth = await checkOllamaHealth();
-  if (ollamaHealth) {
-    console.log("🤖 Ollama connection verified");
+
+  // ✅ Enhanced Ollama health check on startup
+  console.log("🔍 Checking Ollama status...");
+  const health = await checkOllamaHealthDetailed();
+
+  if (health.available && health.modelReady) {
+    console.log("🤖 Ollama is ready and working!");
+  } else if (health.available && !health.modelReady) {
+    console.log("⚠️  Ollama is running but tinyllama might not be loaded");
+    console.log("💡 Try running: ollama pull tinyllama");
   } else {
-    console.log("⚠️  WARNING: Ollama is not running! Start it with: ollama serve");
+    console.log("❌ Ollama is not running!");
+    console.log("💡 Start it with: ollama serve");
+    console.log("💡 Then install tinyllama: ollama pull tinyllama");
   }
-  
+
   console.log("🤖 Server ready for connections");
+  console.log("🔗 Test endpoints:");
+  console.log(`   • Health: http://localhost:${PORT}/health`);
+  console.log(`   • Ollama Status: http://localhost:${PORT}/ollama/status`);
+  console.log(`   • Ollama Test: POST http://localhost:${PORT}/ollama-direct-test`);
 });
