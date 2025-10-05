@@ -1,11 +1,15 @@
-// Fixed server.js with better Ollama handling and debugging
-// Complete Fixed server.js with optimized Ollama handling
+// server.js - WITH .ENV SUPPORT FOR QDRANT
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
 import bodyParser from "body-parser";
 import cors from "cors";
 import JSON5 from "json5";
+import dotenv from "dotenv";
+
+// Load environment variables
+dotenv.config();
+
 const json5parse = JSON5.parse;
 
 // Import your AI training system
@@ -40,6 +44,18 @@ const sentimentAnalyzer = new SentimentAnalyzer();
 let proactiveBehavior;
 
 await annieMemory.loadMemory();
+
+// ✅ Initialize Qdrant with credentials from .env
+if (process.env.QDRANT_URL && process.env.QDRANT_API_KEY) {
+  await annieMemory.initQdrant(
+    process.env.QDRANT_URL,
+    process.env.QDRANT_API_KEY
+  );
+} else {
+  console.log('⚠️  QDRANT_URL or QDRANT_API_KEY not found in .env');
+  console.log('⚠️  Qdrant will not be initialized. Add credentials to .env to enable.');
+}
+
 proactiveBehavior = new ProactiveBehavior(annieMemory);
 
 // ✅ OPTIMIZED OLLAMA QUERY FUNCTION
@@ -49,10 +65,9 @@ async function queryAnnieWithMemory(userPrompt, isProactive = false) {
   const sentiment = sentimentAnalyzer.analyzeSentiment(userPrompt);
   const emotionalContext = sentimentAnalyzer.getEmotionalContext(userPrompt, sentiment);
   const insights = annieMemory.getPersonalityInsights();
-  const recentContext = annieMemory.getRecentContext(3); // Reduced from 8
+  const recentContext = annieMemory.getRecentContext(3);
   const memoryRef = annieMemory.shouldShowMemoryReference() ? annieMemory.getMemoryReference() : null;
 
-  // ✅ MUCH SIMPLER PROMPT - The key fix!
   let systemPrompt = `You are Ai Hoshino, a cheerful, playful AI companion. 
 Current mood: ${annieMemory.mood}. 
 Talk to the user in a warm, natural, and realistic way — like a friend. 
@@ -71,12 +86,11 @@ User: ${userPrompt}
     console.log("🔹 Sending request to Ollama...");
     console.log("🔹 Prompt length:", systemPrompt.length);
 
-    // ✅ CRITICAL FIXES:
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       console.log("⏰ Request timeout - aborting");
       controller.abort();
-    }, 120000); // Increased to 25 seconds
+    }, 120000);
 
     const res = await fetch("http://127.0.0.1:11434/api/generate", {
       method: "POST",
@@ -87,14 +101,14 @@ User: ${userPrompt}
       body: JSON.stringify({
         model: "tinyllama",
         prompt: systemPrompt,
-        stream: false, // ✅ NO streaming
+        stream: false,
         options: {
-          temperature: 0.3, // ✅ Lower temperature for more consistent JSON
-          num_predict: 100, // ✅ Shorter responses
-          top_k: 5, // ✅ More focused responses
+          temperature: 0.3,
+          num_predict: 100,
+          top_k: 5,
           top_p: 0.8,
           repeat_penalty: 1.1,
-          stop: ["\n\nUser:", "Human:", "\n\n", "```"] // ✅ Better stop sequences
+          stop: ["\n\nUser:", "Human:", "\n\n", "```"]
         }
       }),
       signal: controller.signal
@@ -119,7 +133,6 @@ User: ${userPrompt}
 
     let annieResponse = parseAnnieResponse(data.response);
 
-    // ✅ Final validation with better fallback
     if (!annieResponse.reply || annieResponse.reply.length < 3) {
       console.warn("⚠️ Response too short, using contextual fallback");
       annieResponse = getContextualFallback(userPrompt, sentiment);
@@ -127,14 +140,14 @@ User: ${userPrompt}
 
     console.log("✅ Final Annie response:", annieResponse);
 
-    // Save to memory (existing code)
+    // Save to memory
     if (!isProactive) {
-      annieMemory.addConversation('User', userPrompt, { sentiment, ...emotionalContext });
+      await annieMemory.addConversation('User', userPrompt, { sentiment, ...emotionalContext });
       annieMemory.updateMood(sentiment);
       annieMemory.updateRelationships(sentiment);
     }
 
-    annieMemory.addConversation('Annie', annieResponse.reply, {
+    await annieMemory.addConversation('Annie', annieResponse.reply, {
       expression: annieResponse.expression,
       motion: annieResponse.motion,
       mood: annieMemory.mood
@@ -147,8 +160,7 @@ User: ${userPrompt}
       recentHistory: recentContext
     });
 
-    // ✅ Save less frequently to reduce I/O
-    if (Math.random() < 0.2) { // Reduced from 0.3
+    if (Math.random() < 0.2) {
       await annieMemory.saveMemory();
     }
 
@@ -157,7 +169,6 @@ User: ${userPrompt}
   } catch (error) {
     console.error("❌ Error querying Ollama:", error.name, error.message);
 
-    // ✅ Better error handling with contextual fallbacks
     if (error.name === 'AbortError') {
       return getTimeoutFallback(userPrompt);
     }
@@ -170,13 +181,11 @@ User: ${userPrompt}
   }
 }
 
-// ✅ MUCH IMPROVED JSON PARSING
 function parseAnnieResponse(rawResponse) {
   if (!rawResponse || typeof rawResponse !== "string") return null;
 
   console.log("🔍 Parsing response:", rawResponse.substring(0, 200) + "...");
 
-  // Extract JSON metadata at the end
   const jsonMatch = rawResponse.match(/\{[^}]*\}/);
   let expression = "neutral";
   let motion = "idle";
@@ -191,7 +200,6 @@ function parseAnnieResponse(rawResponse) {
     }
   }
 
-  // Take everything BEFORE the JSON as the actual reply
   const replyText = rawResponse.replace(/\{[^}]*\}/, "").trim();
 
   return {
@@ -201,8 +209,6 @@ function parseAnnieResponse(rawResponse) {
   };
 }
 
-
-// ✅ Helper functions for validation and fallbacks
 function validateExpression(exp) {
   const valid = ["happy", "sad", "neutral", "excited", "thinking", "surprised"];
   return valid.includes(exp) ? exp : "neutral";
@@ -273,12 +279,10 @@ function getGenericFallback(userPrompt) {
   };
 }
 
-// ✅ Enhanced Ollama health check
 async function checkOllamaHealthDetailed() {
   try {
     console.log("🔍 Checking Ollama health...");
 
-    // Check if Ollama is running
     const tagsRes = await fetch("http://127.0.0.1:11434/api/tags", {
       method: "GET",
       headers: { "Content-Type": "application/json" },
@@ -292,7 +296,6 @@ async function checkOllamaHealthDetailed() {
     const tagsData = await tagsRes.json();
     console.log("📋 Available models:", tagsData.models?.map(m => m.name) || []);
 
-    // Check if tinyllama is available
     const hasTinyLlama = tagsData.models?.some(m => m.name.includes('tinyllama'));
 
     if (!hasTinyLlama) {
@@ -300,7 +303,6 @@ async function checkOllamaHealthDetailed() {
       return { available: true, modelReady: false, models: tagsData.models };
     }
 
-    // Test a simple generation
     const testRes = await fetch("http://127.0.0.1:11434/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -339,13 +341,12 @@ async function checkOllamaHealthDetailed() {
   }
 }
 
-// ✅ Simple test endpoint for direct Ollama testing
 app.post("/ollama-direct-test", async (req, res) => {
   console.log("🧪 Testing direct Ollama connection...");
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000);  //120 sec
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
 
     const response = await fetch("http://127.0.0.1:11434/api/generate", {
       method: "POST",
@@ -387,7 +388,6 @@ app.post("/ollama-direct-test", async (req, res) => {
   }
 });
 
-// Enhanced Socket.IO handling with better error handling
 io.on("connection", (socket) => {
   connectionCounter++;
   const connectionId = connectionCounter;
@@ -420,7 +420,6 @@ io.on("connection", (socket) => {
     activeConnections.delete(socket.id);
   });
 
-  // Send initial stats
   try {
     socket.emit("annieStats", {
       mood: annieMemory.mood,
@@ -432,7 +431,6 @@ io.on("connection", (socket) => {
       connectionId: connectionId
     });
 
-    // ✅ Send connection confirmation
     socket.emit("connectionConfirmed", {
       connectionId,
       serverTime: Date.now(),
@@ -443,7 +441,6 @@ io.on("connection", (socket) => {
     console.error(`Failed to send initial data to ${socket.id}:`, error);
   }
 
-  // ✅ IMPROVED: Better message handling with timeout protection
   socket.on("chatMessage", async (msg) => {
     console.log(`💬 Message from ${socket.id}:`, msg);
 
@@ -453,11 +450,9 @@ io.on("connection", (socket) => {
 
     proactiveBehavior.updateLastInteraction();
 
-    // ✅ Add processing indicator
     socket.emit("processingMessage", { timestamp: Date.now() });
 
     try {
-      // ✅ Add timeout protection (30 seconds)
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error("Ollama request timeout")), 30000);
       });
@@ -481,12 +476,11 @@ io.on("connection", (socket) => {
       console.error(`❌ Error processing message from ${socket.id}:`, error.message);
 
       socket.emit("aiReply", {
-        reply: "Sorry, I'm having some connection issues... Can you try again in a moment? 😔",
+        reply: "Sorry, I'm having some connection issues... Can you try again in a moment?",
         expression: "sad",
         motion: "lookAway"
       });
 
-      // ✅ Send error details in development
       if (process.env.NODE_ENV === 'development') {
         socket.emit("debugError", {
           error: error.message,
@@ -509,7 +503,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // ✅ Add Ollama health check endpoint for client
   socket.on("checkOllamaStatus", async () => {
     try {
       const health = await checkOllamaHealthDetailed();
@@ -526,7 +519,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Heartbeat system
   const heartbeatInterval = setInterval(() => {
     if (socket.connected) {
       socket.emit('ping');
@@ -541,13 +533,12 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Clear heartbeat on disconnect
   socket.on('disconnect', () => {
     clearInterval(heartbeatInterval);
   });
 });
 
-// Your existing REST API endpoints
+// REST API endpoints
 app.post("/test", async (req, res) => {
   const { prompt } = req.body;
   try {
@@ -571,12 +562,58 @@ app.get("/annie/stats", (req, res) => {
   });
 });
 
-// ✅ Enhanced Ollama status endpoint
 app.get("/ollama/status", async (req, res) => {
   const health = await checkOllamaHealthDetailed();
   res.json({
     ...health,
     endpoint: "http://127.0.0.1:11434",
+    timestamp: Date.now()
+  });
+});
+
+// ✅ NEW QDRANT ENDPOINTS
+app.post("/annie/search", async (req, res) => {
+  const { query, limit = 5 } = req.body;
+  
+  if (!query) {
+    return res.status(400).json({ error: "Query is required" });
+  }
+
+  try {
+    const results = await annieMemory.searchSimilarConversations(query, limit);
+    res.json({
+      query,
+      results,
+      qdrantEnabled: annieMemory.qdrantReady
+    });
+  } catch (error) {
+    console.error("Search error:", error);
+    res.status(500).json({ error: "Search failed" });
+  }
+});
+
+app.post("/annie/sync-to-qdrant", async (req, res) => {
+  if (!annieMemory.qdrantReady) {
+    return res.status(503).json({ error: "Qdrant not initialized" });
+  }
+
+  try {
+    await annieMemory.syncJsonToQdrant();
+    res.json({ 
+      message: "Sync completed successfully",
+      totalConversations: annieMemory.conversationHistory.length
+    });
+  } catch (error) {
+    console.error("Sync error:", error);
+    res.status(500).json({ error: "Sync failed" });
+  }
+});
+
+app.get("/qdrant/status", (req, res) => {
+  res.json({
+    ready: annieMemory.qdrantReady,
+    collection: annieMemory.collectionName,
+    conversationsStored: annieMemory.conversationIdCounter,
     timestamp: Date.now()
   });
 });
@@ -599,7 +636,6 @@ app.post("/annie/reset", async (req, res) => {
   res.json({ message: "Annie's memory has been reset" });
 });
 
-// ✅ Add a simple health endpoint
 app.get("/health", (req, res) => {
   res.json({
     server: "running",
@@ -610,14 +646,13 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Start server with enhanced health checking
+// Start server
 const PORT = 5000;
 server.listen(PORT, async () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
   console.log(`🧠 Annie's memory loaded - ${annieMemory.conversationHistory.length} conversations`);
   console.log(`💕 Current relationship: ${annieMemory.userProfile.relationship_stage} (${annieMemory.relationships.affection}/100 affection)`);
 
-  // ✅ Enhanced Ollama health check on startup
   console.log("🔍 Checking Ollama status...");
   const health = await checkOllamaHealthDetailed();
 
@@ -636,5 +671,6 @@ server.listen(PORT, async () => {
   console.log("🔗 Test endpoints:");
   console.log(`   • Health: http://localhost:${PORT}/health`);
   console.log(`   • Ollama Status: http://localhost:${PORT}/ollama/status`);
-  console.log(`   • Ollama Test: POST http://localhost:${PORT}/ollama-direct-test`);
+  console.log(`   • Qdrant Status: http://localhost:${PORT}/qdrant/status`);
+  console.log(`   • Search: POST http://localhost:${PORT}/annie/search`);
 });
